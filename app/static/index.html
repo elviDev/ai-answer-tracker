@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Answer Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-0: #f4f3f0;
+    --surface-1: #fcfcfb;
+    --border: #e2e1dc;
+    --grid: #ecebe7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #7a7974;
+    --accent: #2a78d6;
+    --good: #008300;
+    --critical: #d03b3a;
+    --warning: #b57800;
+    /* Categorical slots, fixed per engine (color follows the entity). */
+    --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-0: #121211; --surface-1: #1a1a19; --border: #33332f; --grid: #2a2a27;
+      --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+      --accent: #3987e5; --good: #3fae3f; --critical: #e66767; --warning: #d99a1a;
+      --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-0: #121211; --surface-1: #1a1a19; --border: #33332f; --grid: #2a2a27;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --accent: #3987e5; --good: #3fae3f; --critical: #e66767; --warning: #d99a1a;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+         background: var(--surface-0); color: var(--text-primary); }
+  header { padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--surface-1);
+           display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; }
+  header span { color: var(--text-secondary); }
+  header a { margin-left: auto; color: var(--accent); }
+  main { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 16px 24px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 16px; } }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  h3 { font-size: 13px; margin: 20px 0 8px; color: var(--text-secondary); font-weight: 600; }
+  label { display: block; font-size: 12px; color: var(--text-secondary); margin: 10px 0 4px; }
+  input, textarea, select { width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
+                            background: var(--surface-0); color: var(--text-primary); font: inherit; }
+  textarea { min-height: 64px; resize: vertical; }
+  button { padding: 7px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-0);
+           color: var(--text-primary); font: inherit; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .6; cursor: default; }
+  .engines-pick { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .engines-pick label { display: flex; gap: 6px; align-items: center; margin: 0; color: var(--text-primary); font-size: 13px; }
+  .engines-pick input { width: auto; }
+  ul.trackers { list-style: none; margin: 0; padding: 0; }
+  ul.trackers li { padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+  ul.trackers li:hover { background: var(--surface-0); }
+  ul.trackers li.active { background: var(--surface-0); outline: 1px solid var(--accent); }
+  ul.trackers small { display: block; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar .grow { flex: 1; min-width: 200px; }
+  .prompt { color: var(--text-secondary); margin: 2px 0 0; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-top: 16px; }
+  .tile { border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .tile .name { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 12px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .tile .big { font-size: 28px; font-weight: 600; margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+  .tile .meta { color: var(--text-muted); font-size: 12px; }
+  .chart-wrap { position: relative; height: 260px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; color: var(--text-secondary); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-secondary); font-weight: 600; font-size: 12px; }
+  td.num { font-variant-numeric: tabular-nums; }
+  tr.snap { cursor: pointer; }
+  tr.snap:hover td { background: var(--surface-0); }
+  .status { font-size: 12px; }
+  .status.success { color: var(--good); } .status.error { color: var(--critical); } .status.no_answer { color: var(--warning); }
+  .detail td { background: var(--surface-0); white-space: pre-wrap; }
+  .detail a { color: var(--accent); word-break: break-all; }
+  .empty { color: var(--text-muted); padding: 24px 0; text-align: center; }
+  .toast { position: fixed; bottom: 16px; right: 16px; background: var(--text-primary); color: var(--surface-1);
+           padding: 10px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AI Answer Tracker</h1>
+  <span>How AI engines talk about your brand, over time</span>
+  <a href="/docs">API docs</a>
+</header>
+
+<main>
+  <aside>
+    <div class="card">
+      <h2>Trackers</h2>
+      <ul class="trackers" id="trackers"></ul>
+    </div>
+    <form class="card" id="create" style="margin-top:16px">
+      <h2>New tracker</h2>
+      <label for="f-name">Name</label>
+      <input id="f-name" name="name" required placeholder="Project tools - Notion">
+      <label for="f-brand">Brand / keyword</label>
+      <input id="f-brand" name="brand" required placeholder="Notion">
+      <label for="f-aliases">Aliases (comma separated)</label>
+      <input id="f-aliases" name="aliases" placeholder="Notion.so, Notion AI">
+      <label for="f-competitors">Competitors (comma separated)</label>
+      <input id="f-competitors" name="competitors" placeholder="Confluence, Coda, Obsidian">
+      <label for="f-prompt">Question to ask</label>
+      <textarea id="f-prompt" name="prompt" required placeholder="What is the best note-taking app for startups?"></textarea>
+      <label>Engines</label>
+      <div class="engines-pick" id="engine-pick"></div>
+      <label for="f-interval">Re-run every (minutes)</label>
+      <input id="f-interval" name="interval_minutes" type="number" min="5" value="1440">
+      <div style="margin-top:14px"><button class="primary" type="submit">Create tracker</button></div>
+    </form>
+  </aside>
+
+  <section id="detail" class="card">
+    <div class="empty">Create or select a tracker to see its results.</div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const ENGINE_ORDER = ["perplexity", "chatgpt", "google_ai_overview", "mock"];
+let engines = [], trackers = [], selected = null, chart = null;
+
+const $ = (s) => document.querySelector(s);
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pct = (v) => v == null ? "–" : Math.round(v * 100) + "%";
+const list = (s) => s.split(",").map(x => x.trim()).filter(Boolean);
+const label = (name) => engines.find(e => e.name === name)?.label ?? name;
+const color = (name) => { const i = ENGINE_ORDER.indexOf(name); return css(`--series-${(i < 0 ? 3 : i) + 1}`); };
+const fmt = (d) => new Date(d).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2500); }
+
+async function api(path, opts = {}) {
+  const res = await fetch("/api" + path, { headers: { "Content-Type": "application/json" }, ...opts });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail ?? res.statusText));
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+async function loadTrackers() {
+  trackers = await api("/trackers");
+  $("#trackers").innerHTML = trackers.length ? trackers.map(t => `
+    <li data-id="${t.id}" class="${t.id === selected ? "active" : ""}">
+      <strong>${esc(t.name)}</strong>
+      <small>${esc(t.brand)} · ${t.engines.map(label).join(", ")}${t.active ? "" : " · paused"}</small>
+    </li>`).join("") : `<li class="empty">No trackers yet</li>`;
+}
+
+async function select(id) {
+  selected = id;
+  document.querySelectorAll("#trackers li").forEach(li => li.classList.toggle("active", +li.dataset.id === id));
+  const t = trackers.find(x => x.id === id);
+  const [stats, snaps] = await Promise.all([api(`/trackers/${id}/stats`), api(`/trackers/${id}/snapshots?limit=100`)]);
+  renderDetail(t, stats, snaps);
+}
+
+function renderDetail(t, stats, snaps) {
+  const statsSorted = [...stats.engines].sort((a, b) => ENGINE_ORDER.indexOf(a.engine) - ENGINE_ORDER.indexOf(b.engine));
+  $("#detail").innerHTML = `
+    <div class="toolbar">
+      <div class="grow">
+        <h2 style="margin:0">${esc(t.name)}</h2>
+        <p class="prompt">“${esc(t.prompt)}” · tracking <strong>${esc(t.brand)}</strong>${t.competitors.length ? " vs " + t.competitors.map(esc).join(", ") : ""}</p>
+      </div>
+      <button class="primary" id="run">Run now</button>
+      <button id="toggle">${t.active ? "Pause" : "Resume"}</button>
+      <button id="delete">Delete</button>
+    </div>
+    ${statsSorted.length ? `
+      <div class="tiles">${statsSorted.map(s => `
+        <div class="tile">
+          <div class="name"><span class="swatch" style="background:${color(s.engine)}"></span>${esc(label(s.engine))}</div>
+          <div class="big">${pct(s.mention_rate)}</div>
+          <div class="meta">mention rate · ${s.successful_runs}/${s.total_runs} runs ok</div>
+          <div class="meta">avg rank ${s.avg_rank ?? "–"} · cited ${pct(s.citation_rate)} · ${s.changes} changes</div>
+        </div>`).join("")}
+      </div>
+      <h3>Daily mention rate</h3>
+      <div class="legend">${statsSorted.length < 2 ? "" : statsSorted.map(s => `<span><span class="swatch" style="background:${color(s.engine)}"></span>${esc(label(s.engine))}</span>`).join("")}</div>
+      <div class="chart-wrap"><canvas id="chart" aria-label="Daily brand mention rate per engine"></canvas></div>
+      <h3>Answers</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>Engine</th><th>Status</th><th>Mentioned</th><th>Rank</th><th>Cited</th><th>Changed</th></tr></thead>
+        <tbody>${snaps.map(s => `
+          <tr class="snap" data-id="${s.id}">
+            <td>${fmt(s.created_at)}</td>
+            <td>${esc(label(s.engine))}</td>
+            <td class="status ${s.status}">${s.status.replace("_", " ")}</td>
+            <td class="num">${s.status === "success" ? (s.brand_mentioned ? `yes (${s.mention_count}×)` : "no") : "–"}</td>
+            <td class="num">${s.brand_rank ?? "–"}</td>
+            <td>${s.status === "success" ? (s.brand_cited ? "yes" : "no") : "–"}</td>
+            <td>${s.changed == null ? "–" : s.changed ? `yes (${Math.round(s.similarity * 100)}% similar)` : "no"}</td>
+          </tr>
+          <tr class="detail" data-for="${s.id}" hidden><td colspan="7">${s.status === "success"
+            ? esc(s.answer_text) + (s.sources.length ? "\n\nSources:\n" + s.sources.map(x => `• <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title || x.url)}</a>`).join("\n") : "")
+            + (Object.keys(s.competitor_mentions).length ? "\n\nCompetitor mentions: " + Object.entries(s.competitor_mentions).map(([k, v]) => `${esc(k)} ${v}×`).join(", ") : "")
+            : esc(s.error)}</td></tr>`).join("")}
+        </tbody>
+      </table></div>`
+    : `<div class="empty">No runs yet. Click <strong>Run now</strong>, or wait for the worker's schedule.</div>`}`;
+
+  $("#run").onclick = () => runNow(t.id);
+  $("#toggle").onclick = async () => { await api(`/trackers/${t.id}`, { method: "PATCH", body: JSON.stringify({ active: !t.active }) }); await loadTrackers(); select(t.id); };
+  $("#delete").onclick = async () => {
+    if (!confirm(`Delete "${t.name}" and all its history?`)) return;
+    await api(`/trackers/${t.id}`, { method: "DELETE" });
+    selected = null; await loadTrackers();
+    $("#detail").innerHTML = `<div class="empty">Tracker deleted.</div>`;
+  };
+  document.querySelectorAll("tr.snap").forEach(row => row.onclick = () => {
+    const d = document.querySelector(`tr.detail[data-for="${row.dataset.id}"]`); d.hidden = !d.hidden;
+  });
+  if (statsSorted.length) drawChart(statsSorted);
+}
+
+function drawChart(stats) {
+  // Bucket successful runs per day -> share that mentioned the brand.
+  const days = new Set();
+  const series = stats.map(s => {
+    const buckets = {};
+    s.timeline.filter(p => p.status === "success").forEach(p => {
+      const day = p.created_at.slice(0, 10); days.add(day);
+      (buckets[day] ??= { hit: 0, n: 0 }); buckets[day].n++; buckets[day].hit += p.brand_mentioned ? 1 : 0;
+    });
+    return { s, buckets };
+  });
+  const labels = [...days].sort();
+  if (chart) chart.destroy();
+  chart = new Chart($("#chart"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: series.map(({ s, buckets }) => ({
+        label: label(s.engine),
+        data: labels.map(d => buckets[d] ? Math.round(100 * buckets[d].hit / buckets[d].n) : null),
+        borderColor: color(s.engine), backgroundColor: color(s.engine),
+        borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, pointBorderColor: css("--surface-1"), pointBorderWidth: 2,
+        spanGaps: true, tension: 0, clip: false,
+      })),
+    },
+    options: {
+      maintainAspectRatio: false,
+      layout: { padding: { top: 8 } },
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y}% of answers mention the brand` } },
+      },
+      scales: {
+        y: { min: 0, max: 100, ticks: { callback: v => v + "%", color: css("--text-muted"), stepSize: 25 },
+             grid: { color: css("--grid") }, border: { display: false } },
+        x: { ticks: { color: css("--text-muted") }, grid: { display: false } },
+      },
+    },
+  });
+}
+
+async function runNow(id) {
+  const btn = $("#run"); btn.disabled = true; btn.textContent = "Running…";
+  try {
+    const before = (await api(`/trackers/${id}/snapshots?limit=1`))[0]?.id ?? 0;
+    const { engines: running } = await api(`/trackers/${id}/run`, { method: "POST" });
+    toast(`Asking ${running.length} engine(s)… this can take a minute`);
+    // Poll until every engine has produced a new snapshot (or we give up).
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      const fresh = (await api(`/trackers/${id}/snapshots?limit=${running.length}`)).filter(s => s.id > before);
+      if (fresh.length >= running.length) break;
+    }
+    await loadTrackers();
+    if (selected === id) await select(id);
+    toast("Run finished");
+  } catch (e) { toast(e.message); btn.disabled = false; btn.textContent = "Run now"; }
+}
+
+$("#trackers").onclick = (e) => { const li = e.target.closest("li[data-id]"); if (li) select(+li.dataset.id); };
+
+$("#create").onsubmit = async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const picked = [...document.querySelectorAll("#engine-pick input:checked")].map(x => x.value);
+  try {
+    const t = await api("/trackers", { method: "POST", body: JSON.stringify({
+      name: f.get("name"), brand: f.get("brand"), prompt: f.get("prompt"),
+      aliases: list(f.get("aliases")), competitors: list(f.get("competitors")),
+      engines: picked.length ? picked : null, interval_minutes: +f.get("interval_minutes"),
+    })});
+    e.target.reset(); await loadTrackers(); select(t.id); toast("Tracker created");
+  } catch (err) { toast(err.message); }
+};
+
+(async () => {
+  engines = await api("/engines");
+  $("#engine-pick").innerHTML = engines.map(e =>
+    `<label><input type="checkbox" value="${e.name}" ${e.name !== "mock" ? "checked" : ""}>${esc(e.label)}</label>`).join("");
+  await loadTrackers();
+  if (trackers.length) select(trackers[0].id);
+})();
+</script>
+</body>
+</html>
