@@ -1,7 +1,8 @@
+import secrets
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,7 +24,16 @@ from app.schemas import (
     TrackerUpdate,
 )
 
-router = APIRouter(prefix="/api")
+def require_token(authorization: Annotated[str | None, Header()] = None) -> None:
+    expected = get_settings().api_token
+    if not expected:
+        return
+    scheme, _, token = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not secrets.compare_digest(token, expected):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or missing API token")
+
+
+router = APIRouter(prefix="/api", dependencies=[Depends(require_token)])
 SessionDep = Annotated[Session, Depends(get_session)]
 
 

@@ -1,14 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 
 from app.api import router
 from app.db import init_db
-
-STATIC = Path(__file__).parent / "static"
 
 
 @asynccontextmanager
@@ -33,5 +30,6 @@ def health():
 
 
 @app.get("/", include_in_schema=False)
-def dashboard():
-    return FileResponse(STATIC / "index.html")
+def root():
+    # The dashboard is the Next.js app in web/; the API root points at its docs.
+    return RedirectResponse("/docs")
