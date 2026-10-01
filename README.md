@@ -4,7 +4,7 @@ Track how AI engines answer questions about any brand or keyword over time.
 
 It queries AI engine APIs (OpenAI, Claude, Gemini, Perplexity) and scrapes their web apps, normalises the answers across providers, stores timestamped results in PostgreSQL, and exposes a query interface through FastAPI.
 
-Built with **Python, Playwright, FastAPI, PostgreSQL, and Docker**.
+Built with **Python, Playwright, FastAPI, PostgreSQL, and Docker**. The dashboard is a **Next.js 16** app (Tailwind CSS, TanStack Query, Zustand, Zod) in [web/](web/). See [web/README.md](web/README.md) for its architecture.
 
 You define a *tracker*, which is a brand plus a question (for example *"What is the best note-taking app for startups?"* for **Notion**). On a schedule, the worker asks each AI engine that question in a real headless browser and stores every answer. For each answer it records:
 
@@ -14,7 +14,7 @@ You define a *tracker*, which is a brand plus a question (for example *"What is 
 - **Cited?** Whether any source link points at the brand's own domain.
 - **Changed?** Whether the answer differs from the previous one, with a similarity score.
 
-The dashboard shows mention rate per engine over time and lets you read every stored answer.
+The dashboard shows mention rate per engine over time and lets you read every stored answer. It sits behind a login, and the API itself is protected by a token only the dashboard server holds.
 
 ## Engines
 
@@ -49,18 +49,19 @@ Get keys at: [OpenAI](https://platform.openai.com/api-keys) · [Anthropic](https
 ## Quick start (Docker)
 
 ```bash
-cp .env.example .env
+cp .env.example .env    # set API_TOKEN, SESSION_SECRET and ADMIN_PASSWORD
 docker compose up --build
 ```
 
-- Dashboard: http://localhost:8000
-- API docs (Swagger): http://localhost:8000/docs
+- Site and dashboard: http://localhost:3000 (sign in with `ADMIN_PASSWORD`)
+- API docs (Swagger): http://localhost:8000/docs (localhost only; requests need the `API_TOKEN`)
 
-This starts three services:
+This starts four services:
 
 - `db`: PostgreSQL 16.
-- `api`: FastAPI plus the dashboard. "Run now" triggers a run in the background.
+- `api`: the FastAPI REST API. "Run now" triggers a run in the background.
 - `worker`: runs each active tracker every `interval_minutes`.
+- `web`: the Next.js dashboard and public site. The browser only talks to this service, which calls the API server-side with `API_TOKEN`.
 
 ## Local development
 
@@ -72,8 +73,13 @@ playwright install chromium
 
 docker compose up -d db           # or point DATABASE_URL at any Postgres
 cp .env.example .env
-uvicorn app.main:app --reload     # API + dashboard
+uvicorn app.main:app --reload     # API on :8000
 python -m app.worker              # scheduler (use --once to run what's due and exit)
+
+# Dashboard (second terminal)
+cd web
+cp .env.example .env.local        # API_TOKEN must match the one in ../.env
+npm install && npm run dev        # http://localhost:3000
 ```
 
 To watch the browser while debugging a scraper, set `HEADLESS=false`.
@@ -99,7 +105,7 @@ pytest
 Example:
 
 ```bash
-curl -X POST localhost:8000/api/trackers -H "Content-Type: application/json" -d '{
+curl -X POST localhost:8000/api/trackers -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -d '{
   "name": "Note apps",
   "brand": "Notion",
   "aliases": ["Notion.so"],
@@ -126,12 +132,15 @@ All settings are environment variables. See [.env.example](.env.example).
 | `ANSWER_SETTLE_SECONDS` | `3` | An answer counts as finished once its text is unchanged for this long |
 | `SCREENSHOT_DIR` | unset | Save screenshots of failed runs here |
 | `WORKER_POLL_SECONDS` | `60` | How often the worker checks for due trackers |
+| `API_TOKEN` | unset | When set, every `/api` request needs `Authorization: Bearer <API_TOKEN>`. The web app sends it for you. |
+
+The dashboard's own settings (`SESSION_SECRET`, `ADMIN_PASSWORD`, `API_URL`, `NEXT_PUBLIC_SITE_URL`) are documented in [web/.env.example](web/.env.example).
 
 ## Project layout
 
 ```
 app/
-  main.py        FastAPI app + dashboard route
+  main.py        FastAPI app
   api.py         REST endpoints
   runner.py      Runs a tracker's engines and stores snapshots
   worker.py      Scheduler loop
@@ -139,8 +148,8 @@ app/
   models.py      SQLAlchemy models (trackers, snapshots)
   engines/       One module per engine: *_api.py call provider APIs,
                  the rest scrape web UIs with Playwright
-  static/        Dashboard (single HTML page)
-tests/
+tests/           Backend tests (pytest)
+web/             Next.js dashboard + public site (see web/README.md)
 ```
 
 ## Adding an engine

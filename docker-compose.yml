@@ -19,8 +19,9 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://tracker:tracker@db:5432/tracker
+    # Only the web app talks to the API; publish on localhost for /docs and debugging.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     shm_size: 1gb # Chromium needs more than Docker's 64MB default
     depends_on:
       db:
@@ -37,6 +38,22 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  web:
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_SITE_URL: ${SITE_URL:-http://localhost:3000}
+    environment:
+      API_URL: http://api:8000
+      API_TOKEN: ${API_TOKEN:?Set API_TOKEN in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    depends_on:
+      - api
 
 volumes:
   pgdata:
