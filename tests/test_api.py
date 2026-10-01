@@ -13,9 +13,24 @@ TRACKER = {
 }
 
 
-def test_health_and_dashboard(client):
+def test_health_and_root_redirect(client):
     assert client.get("/health").json() == {"status": "ok"}
-    assert "AI Answer Tracker" in client.get("/").text
+    assert client.get("/", follow_redirects=False).headers["location"] == "/docs"
+
+
+def test_api_token_is_enforced_when_configured(client, monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "api_token", "s3cret")
+    assert client.get("/api/trackers").status_code == 401
+    assert client.get("/api/trackers", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    assert client.get("/api/trackers", headers={"Authorization": "Bearer s3cret"}).status_code == 200
+    assert client.get("/health").status_code == 200  # health stays public for container checks
+
+
+def test_timestamps_are_utc(client):
+    created = client.post("/api/trackers", json=TRACKER).json()
+    assert created["created_at"].endswith(("Z", "+00:00"))
 
 
 def test_tracker_crud(client):

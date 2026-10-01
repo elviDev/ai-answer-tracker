@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     perplexity_model: str = "sonar"
     api_timeout_seconds: float = 180
 
+    # When set, every /api request must send "Authorization: Bearer <API_TOKEN>".
+    # The Next.js frontend adds it server-side, so the browser never sees it.
+    api_token: str | None = None
+
     # Worker
     worker_poll_seconds: int = 60
 

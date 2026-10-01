@@ -1,8 +1,17 @@
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
 from app.engines import ENGINES
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value
+
+
+# Timestamps are stored in UTC; make that explicit in the JSON (SQLite returns naive datetimes).
+UTCDateTime = Annotated[datetime, AfterValidator(_as_utc)]
 
 
 def _check_engines(value: list[str] | None) -> list[str] | None:
@@ -49,8 +58,8 @@ class TrackerOut(TrackerBase):
 
     id: int
     engines: list[str]
-    created_at: datetime
-    last_run_at: datetime | None
+    created_at: UTCDateTime
+    last_run_at: UTCDateTime | None
 
 
 class RunRequest(BaseModel):
@@ -75,7 +84,7 @@ class SnapshotOut(BaseModel):
     status: str
     error: str | None
     duration_ms: int
-    created_at: datetime
+    created_at: UTCDateTime
     answer_text: str | None
     sources: list[dict]
     brand_mentioned: bool
@@ -90,7 +99,7 @@ class SnapshotOut(BaseModel):
 
 class TimelinePoint(BaseModel):
     snapshot_id: int
-    created_at: datetime
+    created_at: UTCDateTime
     status: str
     brand_mentioned: bool
     mention_count: int
@@ -108,7 +117,7 @@ class EngineStats(BaseModel):
     avg_rank: float | None
     changes: int = Field(description="Answers that differed from the previous one")
     competitor_mention_rate: dict[str, float]
-    last_run_at: datetime | None
+    last_run_at: UTCDateTime | None
     timeline: list[TimelinePoint]
 
 

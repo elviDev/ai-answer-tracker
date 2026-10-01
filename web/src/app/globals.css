@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+/* Dark mode follows data-theme on <html>, which falls back to the OS setting (see ThemeScript). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ---- Design tokens (light): paper and ink ------------------------------- */
+:root {
+  color-scheme: light;
+  --canvas: #f2efe6;
+  --surface: #faf8f2;
+  --surface-2: #e9e5d9;
+  --line: #d9d3c3;
+  --ink-rule: #1a1814;
+  --grid: #e3ded0;
+  --fg: #1a1814;
+  --fg-muted: #57524a;
+  --fg-subtle: #857f72;
+  --accent: #c93c17;
+  --accent-hover: #a93210;
+  --accent-fg: #fffaf2;
+  --mark: #f6d65e;
+  --mark-fg: #1a1814;
+  --good: #2e6b29;
+  --warn: #8a5a00;
+  --bad: #b3261e;
+
+  /* Categorical series: one fixed slot per engine (CVD-validated, data only, never UI chrome). */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+}
+
+/* ---- Design tokens (dark): warm ink, same hues stepped for the dark surface */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #141311;
+  --surface: #1b1a17;
+  --surface-2: #26241f;
+  --line: #36332c;
+  --ink-rule: #ece6d6;
+  --grid: #2a2823;
+  --fg: #ece6d6;
+  --fg-muted: #b5ad9a;
+  --fg-subtle: #878070;
+  --accent: #f0643d;
+  --accent-hover: #ff7c58;
+  --accent-fg: #141311;
+  --mark: #6b5514;
+  --mark-fg: #fff3c8;
+  --good: #7bbf6a;
+  --warn: #e0a63a;
+  --bad: #f07167;
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-ink-rule: var(--ink-rule);
+  --color-grid: var(--grid);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-mark: var(--mark);
+  --color-mark-fg: var(--mark-fg);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
+  --color-series-4: var(--series-4);
+  --color-series-5: var(--series-5);
+  --color-series-6: var(--series-6);
+  --color-series-7: var(--series-7);
+  --color-series-8: var(--series-8);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-instrument-serif);
+}
+
+/* Small-caps style label used for section marks, table heads and metadata. */
+@utility eyebrow {
+  font-family: var(--font-geist-mono);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+
+/* Headline face: serif, tight, slightly condensed tracking. */
+@utility display {
+  font-family: var(--font-instrument-serif);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  line-height: 1.02;
+}
+
+@layer base {
+  body {
+    @apply bg-canvas font-sans text-fg antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+  ::selection {
+    background: var(--mark);
+    color: var(--mark-fg);
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+}
