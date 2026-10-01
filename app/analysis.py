@@ -42,14 +42,25 @@ def _slug(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.lower())
 
 
+_DOMAIN = re.compile(r"^(?:www\.)?([a-z0-9-]+\.)+[a-z]{2,}$", re.IGNORECASE)
+
+
 def is_cited(sources: list[dict], terms: list[str]) -> bool:
-    """True if any source URL's domain contains the brand (e.g. "Notion" -> notion.so)."""
+    """True if any source's domain contains the brand (e.g. "Notion" -> notion.so).
+
+    Some APIs (Gemini) return redirect URLs and put the real domain in the title,
+    so a title that is itself a bare domain is checked too.
+    """
     slugs = [s for s in (_slug(t) for t in terms) if len(s) >= 3]
     for source in sources:
-        host = urlparse(source.get("url", "")).hostname or ""
-        host_slug = _slug(host.removeprefix("www."))
-        if any(slug in host_slug for slug in slugs):
-            return True
+        hosts = [urlparse(source.get("url", "")).hostname or ""]
+        title = (source.get("title") or "").strip()
+        if _DOMAIN.match(title):
+            hosts.append(title)
+        for host in hosts:
+            host_slug = _slug(host.lower().removeprefix("www."))
+            if any(slug in host_slug for slug in slugs):
+                return True
     return False
 
 

@@ -36,7 +36,19 @@ def _get_tracker(session: Session, tracker_id: int) -> Tracker:
 
 @router.get("/engines", response_model=list[EngineInfo])
 def list_engines():
-    return [EngineInfo(name=n, label=cls.label, requires_browser=cls.requires_browser) for n, cls in ENGINES.items()]
+    infos = []
+    for name, cls in ENGINES.items():
+        reason = cls.unavailable_reason()
+        infos.append(
+            EngineInfo(
+                name=name,
+                label=cls.label,
+                requires_browser=cls.requires_browser,
+                available=reason is None,
+                unavailable_reason=reason,
+            )
+        )
+    return infos
 
 
 @router.get("/trackers", response_model=list[TrackerOut])

@@ -21,6 +21,7 @@
     --warning: #b57800;
     /* Categorical slots, fixed per engine (color follows the entity). */
     --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+    --series-5: #e87ba4; --series-6: #008300; --series-7: #4a3aa7; --series-8: #e34948;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -29,6 +30,7 @@
       --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
       --accent: #3987e5; --good: #3fae3f; --critical: #e66767; --warning: #d99a1a;
       --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+      --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
     }
   }
   :root[data-theme="dark"] {
@@ -37,6 +39,7 @@
     --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
     --accent: #3987e5; --good: #3fae3f; --critical: #e66767; --warning: #d99a1a;
     --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
   }
   * { box-sizing: border-box; }
   body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -62,6 +65,9 @@
   .engines-pick { display: flex; flex-wrap: wrap; gap: 4px 12px; }
   .engines-pick label { display: flex; gap: 6px; align-items: center; margin: 0; color: var(--text-primary); font-size: 13px; }
   .engines-pick input { width: auto; }
+  .engine-group { display: flex; flex-wrap: wrap; gap: 4px 12px; width: 100%; margin-bottom: 6px; }
+  .engine-group > span { width: 100%; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+  .muted { color: var(--text-muted); }
   ul.trackers { list-style: none; margin: 0; padding: 0; }
   ul.trackers li { padding: 8px 10px; border-radius: 6px; cursor: pointer; }
   ul.trackers li:hover { background: var(--surface-0); }
@@ -136,7 +142,6 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const ENGINE_ORDER = ["perplexity", "chatgpt", "google_ai_overview", "mock"];
 let engines = [], trackers = [], selected = null, chart = null;
 
 const $ = (s) => document.querySelector(s);
@@ -145,7 +150,9 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&
 const pct = (v) => v == null ? "–" : Math.round(v * 100) + "%";
 const list = (s) => s.split(",").map(x => x.trim()).filter(Boolean);
 const label = (name) => engines.find(e => e.name === name)?.label ?? name;
-const color = (name) => { const i = ENGINE_ORDER.indexOf(name); return css(`--series-${(i < 0 ? 3 : i) + 1}`); };
+// Each engine keeps one categorical slot (by its position in /api/engines), so colors never shift.
+const slot = (name) => { const i = engines.findIndex(e => e.name === name); return i < 0 ? 99 : i; };
+const color = (name) => css(`--series-${Math.min(slot(name), 7) + 1}`);
 const fmt = (d) => new Date(d).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2500); }
@@ -177,7 +184,7 @@ async function select(id) {
 }
 
 function renderDetail(t, stats, snaps) {
-  const statsSorted = [...stats.engines].sort((a, b) => ENGINE_ORDER.indexOf(a.engine) - ENGINE_ORDER.indexOf(b.engine));
+  const statsSorted = [...stats.engines].sort((a, b) => slot(a.engine) - slot(b.engine));
   $("#detail").innerHTML = `
     <div class="toolbar">
       <div class="grow">
@@ -313,8 +320,17 @@ $("#create").onsubmit = async (e) => {
 
 (async () => {
   engines = await api("/engines");
-  $("#engine-pick").innerHTML = engines.map(e =>
-    `<label><input type="checkbox" value="${e.name}" ${e.name !== "mock" ? "checked" : ""}>${esc(e.label)}</label>`).join("");
+  const anyApi = engines.some(e => !e.requires_browser && e.available && e.name !== "mock");
+  const pick = (e) => {
+    const checked = e.available && e.name !== "mock" && (anyApi ? !e.requires_browser : e.requires_browser);
+    const note = e.available ? "" : ` <small class="muted" title="${esc(e.unavailable_reason)}">(no key)</small>`;
+    return `<label title="${esc(e.unavailable_reason ?? "")}"><input type="checkbox" value="${e.name}" ${checked ? "checked" : ""} ${e.available ? "" : "disabled"}>${esc(e.label)}${note}</label>`;
+  };
+  const group = (title, list) => `<div class="engine-group"><span>${title}</span>${list.map(pick).join("")}</div>`;
+  $("#engine-pick").innerHTML =
+    group("Official APIs", engines.filter(e => !e.requires_browser && e.name !== "mock")) +
+    group("Browser scraping", engines.filter(e => e.requires_browser)) +
+    group("Testing", engines.filter(e => e.name === "mock"));
   await loadTrackers();
   if (trackers.length) select(trackers[0].id);
 })();

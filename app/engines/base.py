@@ -24,13 +24,51 @@ class EngineAnswer:
     sources: list[dict] = field(default_factory=list)  # [{"title": ..., "url": ...}]
 
 
+def dedupe_sources(sources: list[dict]) -> list[dict]:
+    seen: set[str] = set()
+    unique = []
+    for source in sources:
+        url = source.get("url") or ""
+        if url.startswith("http") and url not in seen:
+            seen.add(url)
+            unique.append({"title": (source.get("title") or "")[:300], "url": url})
+    return unique
+
+
 class Engine(ABC):
     name: ClassVar[str]
     label: ClassVar[str]
     requires_browser: ClassVar[bool] = True
 
+    @classmethod
+    def unavailable_reason(cls) -> str | None:
+        """Why this engine can't run right now (e.g. missing API key), or None if it can."""
+        return None
+
     @abstractmethod
     def ask(self, prompt: str, context: BrowserContext | None) -> EngineAnswer: ...
+
+
+class ApiEngine(Engine):
+    """An engine that calls a provider's official API (with web search) instead of scraping."""
+
+    requires_browser = False
+    # Settings attribute holding the API key, and the env var users set.
+    key_setting: ClassVar[str]
+
+    @classmethod
+    def api_key(cls) -> str | None:
+        return getattr(get_settings(), cls.key_setting)
+
+    @classmethod
+    def unavailable_reason(cls) -> str | None:
+        return None if cls.api_key() else f"{cls.key_setting.upper()} is not set"
+
+    def require_key(self) -> str:
+        key = self.api_key()
+        if not key:
+            raise EngineError(self.unavailable_reason())
+        return key
 
 
 class BrowserEngine(Engine):
@@ -106,15 +144,12 @@ class BrowserEngine(Engine):
             f":is({selector}) a[href]",
             "els => els.map(e => ({title: (e.innerText || e.title || '').trim(), url: e.href}))",
         )
-        seen: set[str] = set()
-        links = []
-        for link in raw:
-            url = link["url"]
-            host = urlparse(url).hostname or ""
-            if not url.startswith("http") or url in seen:
-                continue
-            if any(host == h or host.endswith("." + h) for h in self.internal_hosts):
-                continue
-            seen.add(url)
-            links.append({"title": link["title"][:300], "url": url})
-        return links
+        external = [
+            link
+            for link in raw
+            if not any(
+                (host := urlparse(link["url"]).hostname or "") == h or host.endswith("." + h)
+                for h in self.internal_hosts
+            )
+        ]
+        return dedupe_sources(external)

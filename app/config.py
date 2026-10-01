@@ -23,6 +23,19 @@ class Settings(BaseSettings):
     # When set, a screenshot is saved here whenever an engine fails.
     screenshot_dir: str | None = None
 
+    # Provider APIs. An API engine is only usable once its key is set.
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-6-astra"
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-opus-5-5"
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-3.8-flash"
+    # Grounding with Google Search needs billing on most Gemini projects; turn off to use the free tier.
+    gemini_grounding: bool = True
+    perplexity_api_key: str | None = None
+    perplexity_model: str = "sonar"
+    api_timeout_seconds: float = 180
+
     # Worker
     worker_poll_seconds: int = 60
 

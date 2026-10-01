@@ -122,3 +122,5 @@ class EngineInfo(BaseModel):
     name: str
     label: str
     requires_browser: bool
+    available: bool
+    unavailable_reason: str | None = None

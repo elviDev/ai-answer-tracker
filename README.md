@@ -2,6 +2,8 @@
 
 Track how AI engines answer questions about any brand or keyword over time.
 
+It queries AI engine APIs (OpenAI, Claude, Gemini, Perplexity) and scrapes their web apps, normalises the answers across providers, stores timestamped results in PostgreSQL, and exposes a query interface through FastAPI.
+
 Built with **Python, Playwright, FastAPI, PostgreSQL, and Docker**.
 
 You define a *tracker*, which is a brand plus a question (for example *"What is the best note-taking app for startups?"* for **Notion**). On a schedule, the worker asks each AI engine that question in a real headless browser and stores every answer. For each answer it records:
@@ -15,6 +17,25 @@ You define a *tracker*, which is a brand plus a question (for example *"What is 
 The dashboard shows mention rate per engine over time and lets you read every stored answer.
 
 ## Engines
+
+There are two kinds of engine. You can mix both in one tracker.
+
+### Official APIs (recommended)
+
+Each engine calls the provider's official API with its built-in web search turned on, so answers are grounded in live results like the consumer apps. These engines are reliable: no CAPTCHAs, no sign-up walls. Each one switches on once its API key is set in `.env`. Without a key it shows as "(no key)" in the dashboard.
+
+| Name | Provider / API | Web search | Default model (`*_MODEL` to override) |
+|---|---|---|---|
+| `openai` | OpenAI Responses API | `web_search` tool | `gpt-6-astra` |
+| `claude` | Anthropic Messages API | `web_search` server tool | `claude-opus-5-5` |
+| `gemini` | Google Gemini Interactions API | Grounding with Google Search | `gemini-3.8-flash` |
+| `perplexity_api` | Perplexity Sonar API | Always on | `sonar` |
+
+Every provider's answer is normalised to the same shape (answer text + `{title, url}` sources) before analysis, so stats are comparable across engines. These APIs are paid per request. Web search feeds page excerpts into the model, so expect roughly a few cents per engine per run, plus each provider's small per-search fee. A daily tracker on four engines costs a few dollars a month. For Claude, `ANTHROPIC_MODEL=claude-sonnet-5-5` is a cheaper option. The Claude engine also enables Anthropic's server-side refusal fallback, so a declined answer is retried on a suitable model automatically.
+
+Get keys at: [OpenAI](https://platform.openai.com/api-keys) · [Anthropic](https://console.anthropic.com/settings/keys) · [Google AI Studio](https://aistudio.google.com/apikey) · [Perplexity](https://www.perplexity.ai/account/api)
+
+### Browser scraping (no keys)
 
 | Name | What it scrapes |
 |---|---|
@@ -96,7 +117,10 @@ All settings are environment variables. See [.env.example](.env.example).
 | Variable | Default | |
 |---|---|---|
 | `DATABASE_URL` | `postgresql+psycopg://tracker:tracker@localhost:5432/tracker` | SQLAlchemy URL |
-| `DEFAULT_ENGINES` | `["perplexity","chatgpt","google_ai_overview"]` | Used when a tracker doesn't list engines |
+| `DEFAULT_ENGINES` | `["perplexity","chatgpt","google_ai_overview"]` | Used when a tracker doesn't list engines. With API keys set, `["openai","claude","gemini","perplexity_api"]` is a better choice. |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `PERPLEXITY_API_KEY` | unset | Turns on the matching API engine |
+| `OPENAI_MODEL` / `ANTHROPIC_MODEL` / `GEMINI_MODEL` / `PERPLEXITY_MODEL` | see the Engines section | Model used by each API engine |
+| `API_TIMEOUT_SECONDS` | `180` | Max wait for an API answer |
 | `HEADLESS` | `true` | Show the browser when `false` |
 | `BROWSER_TIMEOUT_SECONDS` | `90` | Max wait for an answer |
 | `ANSWER_SETTLE_SECONDS` | `3` | An answer counts as finished once its text is unchanged for this long |
@@ -113,11 +137,14 @@ app/
   worker.py      Scheduler loop
   analysis.py    Mention / rank / citation / change detection
   models.py      SQLAlchemy models (trackers, snapshots)
-  engines/       One Playwright scraper per AI engine
+  engines/       One module per engine: *_api.py call provider APIs,
+                 the rest scrape web UIs with Playwright
   static/        Dashboard (single HTML page)
 tests/
 ```
 
 ## Adding an engine
 
-Create `app/engines/<name>.py` with a `BrowserEngine` subclass that sets `name` and `label` and implements `ask(prompt, context)`. Most engines only need to open a URL, call `wait_for_stable_text(page, selector)`, and call `extract_links(...)`. Then register the class in [app/engines/\_\_init\_\_.py](app/engines/__init__.py).
+For an API, subclass `ApiEngine`, set `key_setting` to a new setting in [app/config.py](app/config.py), and return an `EngineAnswer(text, sources)` from `ask()`. See [app/engines/perplexity_api.py](app/engines/perplexity_api.py) for the smallest example.
+
+For a website, create `app/engines/<name>.py` with a `BrowserEngine` subclass that sets `name` and `label` and implements `ask(prompt, context)`. Most engines only need to open a URL, call `wait_for_stable_text(page, selector)`, and call `extract_links(...)`. Then register the class in [app/engines/\_\_init\_\_.py](app/engines/__init__.py).
